@@ -15,7 +15,7 @@ final class DashboardViewModel: ObservableObject {
 
     func totalSpent(transactions: [STTransaction]) -> Double {
         transactions
-            .filter { $0.date.isSameMonth(as: selectedMonth) && $0.isExpense }
+            .filter { $0.date.isSameMonth(as: selectedMonth) && $0.isExpense && !$0.isTransfer }
             .reduce(0) { $0 + $1.amount }
     }
 
@@ -32,7 +32,7 @@ final class DashboardViewModel: ObservableObject {
     }
 
     func spendingByCategory(transactions: [STTransaction]) -> [CategorySpend] {
-        let expenses = transactions.filter { $0.date.isSameMonth(as: selectedMonth) && $0.isExpense }
+        let expenses = transactions.filter { $0.date.isSameMonth(as: selectedMonth) && $0.isExpense && !$0.isTransfer }
         var grouped: [String: Double] = [:]
         for tx in expenses {
             grouped[tx.effectiveCategory, default: 0] += tx.amount

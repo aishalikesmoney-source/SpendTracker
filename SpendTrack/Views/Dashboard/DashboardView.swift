@@ -4,6 +4,7 @@ import Charts
 
 struct DashboardView: View {
     @StateObject private var vm = DashboardViewModel()
+    @StateObject private var budgetsVM = BudgetsViewModel()
     @EnvironmentObject var accountsVM: AccountsViewModel
     @Environment(\.modelContext) private var modelContext
 
@@ -11,6 +12,9 @@ struct DashboardView: View {
     @Query private var accounts: [STAccount]
     @Query private var budgets: [Budget]
     @Query private var plaidItems: [PlaidItem]
+
+    @State private var tooltipItem: CategorySpend?
+    @State private var tooltipOffset: CGFloat = 0
 
     var body: some View {
         NavigationStack {
@@ -29,6 +33,11 @@ struct DashboardView: View {
                         categoryChartSection(catSpends)
                     }
 
+                    let budgetProgress = budgetsVM.progress(budgets: budgets, transactions: transactions)
+                    if !budgetProgress.isEmpty {
+                        budgetSection(budgetProgress)
+                    }
+
                     let recent = vm.recentTransactions(transactions: transactions)
                     if !recent.isEmpty {
                         recentSection(recent)
@@ -43,6 +52,9 @@ struct DashboardView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Overview")
+            .onChange(of: vm.selectedMonth) { _, newMonth in
+                budgetsVM.selectedMonth = newMonth
+            }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -168,15 +180,52 @@ struct DashboardView: View {
                 .font(.headline)
                 .padding(.horizontal, 4)
 
-            Chart(data) { item in
-                BarMark(
-                    x: .value("Amount", item.amount),
-                    y: .value("Category", item.displayName)
-                )
-                .foregroundStyle(item.color)
-                .cornerRadius(6)
+            ZStack(alignment: .topLeading) {
+                Chart(data) { item in
+                    BarMark(
+                        x: .value("Amount", item.amount),
+                        y: .value("Category", item.displayName)
+                    )
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [item.color, item.color.darker(by: 0.3)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(6)
+                }
+                .frame(height: CGFloat(min(data.count, 7)) * 44)
+                .chartOverlay { proxy in
+                    GeometryReader { geo in
+                        Rectangle()
+                            .fill(Color.clear)
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(
+                                LongPressGesture(minimumDuration: 0.3)
+                                    .sequenced(before: DragGesture(minimumDistance: 0))
+                                    .onChanged { value in
+                                        if case .second(true, let drag) = value {
+                                            let location = drag?.location ?? .zero
+                                            if let category: String = proxy.value(atY: location.y, as: String.self),
+                                               let match = data.first(where: { $0.displayName == category }) {
+                                                tooltipItem = match
+                                                tooltipOffset = location.y
+                                            }
+                                        }
+                                    }
+                                    .onEnded { _ in tooltipItem = nil }
+                            )
+                    }
+                }
+
+                if let tip = tooltipItem {
+                    CategoryTooltip(item: tip)
+                        .offset(y: max(0, tooltipOffset - 20))
+                        .transition(.opacity)
+                }
             }
-            .frame(height: CGFloat(min(data.count, 7)) * 44)
+            .animation(.easeInOut(duration: 0.15), value: tooltipItem?.id)
             .padding()
             .cardStyle()
         }
@@ -209,6 +258,22 @@ struct DashboardView: View {
         }
     }
 
+    // MARK: - Budget Section
+
+    private func budgetSection(_ list: [BudgetProgress]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Budgets")
+                .font(.headline)
+                .padding(.horizontal, 4)
+
+            VStack(spacing: 12) {
+                ForEach(list) { progress in
+                    BudgetCard(progress: progress) {}
+                }
+            }
+        }
+    }
+
     // MARK: - No Accounts
 
     private var noAccountsBanner: some View {
@@ -229,6 +294,26 @@ struct DashboardView: View {
         .padding(24)
         .frame(maxWidth: .infinity)
         .cardStyle()
+    }
+}
+
+// MARK: - Category Tooltip
+
+struct CategoryTooltip: View {
+    let item: CategorySpend
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.displayName)
+                .font(.caption.bold())
+            Text(item.amount.currencyString())
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .shadow(color: .black.opacity(0.12), radius: 4, x: 0, y: 2)
     }
 }
 
