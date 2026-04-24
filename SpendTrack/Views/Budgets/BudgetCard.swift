@@ -42,8 +42,7 @@ struct BudgetCard: View {
                 }
             }
 
-            ProgressView(value: progress.ratio)
-                .tint(progressColor)
+            BudgetProgressBar(progress: progress)
                 .animation(.spring, value: progress.ratio)
 
             HStack {
@@ -71,5 +70,56 @@ struct BudgetCard: View {
         if progress.isOverBudget { return .red }
         if progress.ratio > 0.8 { return .orange }
         return CategoryHelper.color(for: progress.budget.category)
+    }
+}
+
+struct BudgetProgressBar: View {
+    let progress: BudgetProgress
+
+    private var baseColor: Color { CategoryHelper.color(for: progress.budget.category) }
+    private var overColor: Color { baseColor.darker(by: 0.35) }
+    private var budgetRatio: Double { min(progress.ratio, 1.0) }
+    private var overRatio: Double {
+        guard progress.isOverBudget else { return 0 }
+        return (progress.spent - progress.budget.monthlyLimit) / progress.spent
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let totalWidth = geo.size.width
+            let normalWidth = progress.isOverBudget
+                ? totalWidth * (1 - overRatio)
+                : totalWidth * budgetRatio
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(.systemFill))
+                    .frame(height: 8)
+
+                if progress.isOverBudget {
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(baseColor)
+                            .frame(width: normalWidth, height: 8)
+                        Rectangle()
+                            .fill(overColor)
+                            .frame(width: totalWidth * overRatio, height: 8)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                } else {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(budgetRatio > 0.8 ? Color.orange : baseColor)
+                        .frame(width: normalWidth, height: 8)
+                }
+
+                if progress.isOverBudget {
+                    Rectangle()
+                        .fill(Color(.systemBackground))
+                        .frame(width: 2, height: 12)
+                        .offset(x: normalWidth - 1)
+                }
+            }
+        }
+        .frame(height: 8)
     }
 }
